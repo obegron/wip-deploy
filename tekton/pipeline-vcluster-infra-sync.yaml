@@ -1,0 +1,43 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: vcluster-infra-sync
+spec:
+  params:
+    - name: product
+      type: string
+    - name: builder-image
+      type: string
+  workspaces:
+    - name: cfg-repo
+    - name: gitops-repo
+    - name: vcluster-catalog
+  tasks:
+    - name: generate
+      taskRef:
+        name: vcluster-infra-generate
+      params:
+        - name: product
+          value: $(params.product)
+        - name: builder-image
+          value: $(params.builder-image)
+      workspaces:
+        - name: cfg-repo
+          workspace: cfg-repo
+        - name: gitops-repo
+          workspace: gitops-repo
+        - name: vcluster-catalog
+          workspace: vcluster-catalog
+    - name: validate
+      runAfter:
+        - generate
+      taskRef:
+        name: vcluster-infra-validate
+      params:
+        - name: product
+          value: $(params.product)
+        - name: builder-image
+          value: $(params.builder-image)
+      workspaces:
+        - name: gitops-repo
+          workspace: gitops-repo

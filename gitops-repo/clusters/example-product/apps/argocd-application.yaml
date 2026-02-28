@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: product-example-apps
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://vcluster-example-product.product-example.svc.cluster.local
+    namespace: default
+  source:
+    repoURL: https://git.example.com/platform/gitops-repo.git
+    targetRevision: main
+    path: clusters/example-product/apps
+    kustomize:
+      buildOptions: "--enable-helm"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

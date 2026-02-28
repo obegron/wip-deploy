@@ -1,0 +1,118 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: vcluster-infra-generate
+spec:
+  description: Generate vcluster infra gitops manifests from cfg and vcluster-catalog repos.
+  params:
+    - name: product
+      type: string
+    - name: builder-image
+      type: string
+  workspaces:
+    - name: cfg-repo
+    - name: gitops-repo
+    - name: vcluster-catalog
+  steps:
+    - name: generate
+      image: $(params.builder-image)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        PRODUCT="$(params.product)"
+        CFG_ROOT="$(workspaces.cfg-repo.path)"
+        GITOPS_ROOT="$(workspaces.gitops-repo.path)"
+        CATALOG_ROOT="$(workspaces.vcluster-catalog.path)"
+
+        CFG_FILE="${CFG_ROOT}/products/${PRODUCT}/product.yaml"
+        if [ ! -f "$CFG_FILE" ]; then
+          echo "missing config: $CFG_FILE" >&2
+          exit 1
+        fi
+
+        CHANNEL="$(yq e '.spec.vcluster.channel // "stable"' "$CFG_FILE")"
+        CATALOG_FILE="${CATALOG_ROOT}/channels/${CHANNEL}/vcluster.yaml"
+        if [ ! -f "$CATALOG_FILE" ]; then
+          echo "missing catalog file: $CATALOG_FILE" >&2
+          exit 1
+        fi
+
+        TENANT_NS="$(yq e '.spec.tenant.namespace' "$CFG_FILE")"
+        VREL="$(yq e ".spec.vcluster.releaseName // \"vcluster-${PRODUCT}\"" "$CFG_FILE")"
+        CHART_REPO="$(yq e '.spec.chart.repo' "$CATALOG_FILE")"
+        CHART_NAME="$(yq e '.spec.chart.name' "$CATALOG_FILE")"
+        CHART_VER="$(yq e '.spec.chart.version' "$CATALOG_FILE")"
+
+        OUT_DIR="${GITOPS_ROOT}/clusters/${PRODUCT}/infra"
+        mkdir -p "$OUT_DIR"
+
+        cat > "${OUT_DIR}/kustomization.yaml" <<YAML
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        namespace: ${TENANT_NS}
+        resources:
+          - namespace.yaml
+          - networkpolicy-argocd-access.yaml
+        helmCharts:
+          - name: ${CHART_NAME}
+            repo: ${CHART_REPO}
+            version: ${CHART_VER}
+            releaseName: ${VREL}
+            namespace: ${TENANT_NS}
+            valuesFile: vcluster-values.generated.yaml
+        YAML
+
+        cat > "${OUT_DIR}/namespace.yaml" <<YAML
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: ${TENANT_NS}
+          labels:
+            platform.example.io/managed-by: argocd
+        YAML
+
+        cat > "${OUT_DIR}/networkpolicy-argocd-access.yaml" <<YAML
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: allow-vcluster-api-from-argocd-and-tekton
+          namespace: ${TENANT_NS}
+        spec:
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vcluster
+          policyTypes:
+            - Ingress
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: argocd
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: tekton-pipelines
+              ports:
+                - protocol: TCP
+                  port: 443
+        YAML
+
+        yq e '.spec.values // {}' "$CATALOG_FILE" > /tmp/catalog-values.yaml
+        yq e '.spec.vcluster.values // {}' "$CFG_FILE" > /tmp/cfg-values.yaml
+        yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' /tmp/catalog-values.yaml /tmp/cfg-values.yaml > "${OUT_DIR}/vcluster-values.generated.yaml"
+
+        cat > "${OUT_DIR}/vcluster-source.generated.yaml" <<YAML
+        apiVersion: platform.example.io/v1alpha1
+        kind: VClusterSource
+        metadata:
+          name: ${PRODUCT}
+        spec:
+          channel: ${CHANNEL}
+          chart:
+            repo: ${CHART_REPO}
+            name: ${CHART_NAME}
+            version: ${CHART_VER}
+          generatedAt: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        YAML
+
+        echo "generated infra for ${PRODUCT} using ${CHANNEL} channel (${CHART_VER})"

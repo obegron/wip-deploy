@@ -1,0 +1,8 @@
+{
+  "replicaCount": 2,
+  "image": {
+    "registry": "registry.internal.example.com",
+    "repository": "dockerhub/bitnami/nginx",
+    "tag": "1.27.2-debian-12-r0"
+  }
+}

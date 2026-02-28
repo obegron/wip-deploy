@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: product-schema-not-enforced
+  annotations:
+    purpose: "Human-readable schema reference for ProductDeployment"
+data:
+  schema: |
+    required:
+      - metadata.name
+      - spec.tenant.namespace
+      - spec.vcluster.channel
+      - spec.imageMirrors.allowedRegistries[]
+      - spec.imageMirrors.translations
+      - spec.applications[]
+    notes:
+      - vcluster chart source/version come from the vcluster-catalog repository channel.
+      - All app images must resolve to allowed internal registries.

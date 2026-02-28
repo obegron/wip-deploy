@@ -1,0 +1,23 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-internal-image-registry
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: restrict-image-registries
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Images must use an approved internal registry."
+        foreach:
+          - list: "request.object.spec.containers"
+            anyPattern:
+              - image: "registry.internal.example.com/*"
+          - list: "request.object.spec.initContainers || []"
+            anyPattern:
+              - image: "registry.internal.example.com/*"

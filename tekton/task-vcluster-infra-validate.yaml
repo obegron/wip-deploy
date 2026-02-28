@@ -1,0 +1,31 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: vcluster-infra-validate
+spec:
+  description: Validate vcluster infra kustomize rendering.
+  params:
+    - name: product
+      type: string
+    - name: builder-image
+      type: string
+  workspaces:
+    - name: gitops-repo
+  steps:
+    - name: validate
+      image: $(params.builder-image)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        PRODUCT="$(params.product)"
+        GITOPS_ROOT="$(workspaces.gitops-repo.path)"
+        INFRA_DIR="${GITOPS_ROOT}/clusters/${PRODUCT}/infra"
+
+        if [ ! -d "$INFRA_DIR" ]; then
+          echo "missing infra directory: $INFRA_DIR" >&2
+          exit 1
+        fi
+
+        kustomize build --enable-helm "$INFRA_DIR" >/dev/null
+        echo "infra kustomize render succeeded for ${PRODUCT}"

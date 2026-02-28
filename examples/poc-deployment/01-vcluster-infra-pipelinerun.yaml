@@ -1,0 +1,23 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: vcluster-infra-sync-example-product
+  namespace: tekton-pipelines
+spec:
+  pipelineRef:
+    name: vcluster-infra-sync
+  params:
+    - name: product
+      value: example-product
+    - name: builder-image
+      value: <builder-image>
+  workspaces:
+    - name: cfg-repo
+      persistentVolumeClaim:
+        claimName: <cfg-repo-pvc>
+    - name: gitops-repo
+      persistentVolumeClaim:
+        claimName: <gitops-repo-pvc>
+    - name: vcluster-catalog
+      persistentVolumeClaim:
+        claimName: <vcluster-catalog-pvc>

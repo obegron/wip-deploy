@@ -1,0 +1,68 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: validate-internal-mirror-images
+spec:
+  description: Fail if rendered manifests reference non-approved registries.
+  params:
+    - name: product
+      type: string
+    - name: builder-image
+      type: string
+  workspaces:
+    - name: cfg-repo
+    - name: gitops-repo
+  steps:
+    - name: validate
+      image: $(params.builder-image)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        PRODUCT="$(params.product)"
+        CFG_ROOT="$(workspaces.cfg-repo.path)"
+        GITOPS_ROOT="$(workspaces.gitops-repo.path)"
+
+        CFG_FILE="${CFG_ROOT}/products/${PRODUCT}/product.yaml"
+        ROOT="${GITOPS_ROOT}/clusters/${PRODUCT}/apps"
+
+        if [[ ! -f "$CFG_FILE" ]]; then
+          echo "missing config: $CFG_FILE" >&2
+          exit 1
+        fi
+
+        if [[ ! -d "$ROOT" ]]; then
+          echo "missing apps manifests: $ROOT" >&2
+          exit 1
+        fi
+
+        mapfile -t ALLOWED < <(yq e '.spec.imageMirrors.allowedRegistries[]' "$CFG_FILE")
+        if [[ ${#ALLOWED[@]} -eq 0 ]]; then
+          echo "no allowed registries defined" >&2
+          exit 1
+        fi
+
+        rendered="$(kustomize build --enable-helm "$ROOT")"
+        images="$(printf '%s\n' "$rendered" | yq e '.. | .image? // empty' -)"
+
+        fail=0
+        while IFS= read -r image; do
+          [[ -z "$image" ]] && continue
+          ok=1
+          for reg in "${ALLOWED[@]}"; do
+            if [[ "$image" == "$reg"/* ]]; then
+              ok=0
+              break
+            fi
+          done
+          if [[ $ok -ne 0 ]]; then
+            echo "disallowed image: $image" >&2
+            fail=1
+          fi
+        done <<< "$images"
+
+        if [[ $fail -ne 0 ]]; then
+          exit 1
+        fi
+
+        echo "all rendered images are from approved registries"

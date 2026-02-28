@@ -1,0 +1,22 @@
+{
+  "controlPlane": {
+    "service": {
+      "type": "ClusterIP"
+    }
+  },
+  "sync": {
+    "toHost": {
+      "ingresses": {
+        "enabled": true
+      },
+      "services": {
+        "enabled": true
+      }
+    }
+  },
+  "integrations": {
+    "metricsServer": {
+      "enabled": true
+    }
+  }
+}

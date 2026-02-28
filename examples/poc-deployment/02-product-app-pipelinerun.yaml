@@ -1,0 +1,20 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: product-app-sync-example-product
+  namespace: tekton-pipelines
+spec:
+  pipelineRef:
+    name: product-app-sync
+  params:
+    - name: product
+      value: example-product
+    - name: builder-image
+      value: <builder-image>
+  workspaces:
+    - name: cfg-repo
+      persistentVolumeClaim:
+        claimName: <cfg-repo-pvc>
+    - name: gitops-repo
+      persistentVolumeClaim:
+        claimName: <gitops-repo-pvc>

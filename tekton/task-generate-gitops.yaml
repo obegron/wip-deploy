@@ -1,0 +1,123 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: generate-gitops-from-product-config
+spec:
+  description: Generate app gitops manifests from cfg repo product config.
+  params:
+    - name: product
+      type: string
+    - name: builder-image
+      type: string
+  workspaces:
+    - name: cfg-repo
+    - name: gitops-repo
+  steps:
+    - name: generate
+      image: $(params.builder-image)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        PRODUCT="$(params.product)"
+        CFG_ROOT="$(workspaces.cfg-repo.path)"
+        GITOPS_ROOT="$(workspaces.gitops-repo.path)"
+
+        CFG_FILE="${CFG_ROOT}/products/${PRODUCT}/product.yaml"
+        ROOT="${GITOPS_ROOT}/clusters/${PRODUCT}"
+
+        if [[ ! -f "$CFG_FILE" ]]; then
+          echo "missing config: $CFG_FILE" >&2
+          exit 1
+        fi
+
+        rm -rf "$ROOT/apps/releases"
+        mkdir -p "$ROOT/apps/releases"
+
+        cat > "$ROOT/apps/kustomization.yaml" <<'YAML'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - policies.yaml
+          - releases
+        YAML
+
+        RELEASES_K="${ROOT}/apps/releases/kustomization.yaml"
+        echo "apiVersion: kustomize.config.k8s.io/v1beta1" > "$RELEASES_K"
+        echo "kind: Kustomization" >> "$RELEASES_K"
+        echo "resources:" >> "$RELEASES_K"
+
+        APP_COUNT="$(yq e '.spec.applications | length' "$CFG_FILE")"
+        for ((i=0; i<APP_COUNT; i++)); do
+          ANAME="$(yq e ".spec.applications[$i].name" "$CFG_FILE")"
+          ANS="$(yq e ".spec.applications[$i].namespace" "$CFG_FILE")"
+          CREPO="$(yq e ".spec.applications[$i].chart.repo" "$CFG_FILE")"
+          CNAME="$(yq e ".spec.applications[$i].chart.name" "$CFG_FILE")"
+          CVER="$(yq e ".spec.applications[$i].chart.version" "$CFG_FILE")"
+
+          APP_DIR="$ROOT/apps/releases/$ANAME"
+          mkdir -p "$APP_DIR"
+          echo "  - $ANAME" >> "$RELEASES_K"
+
+          cat > "$APP_DIR/kustomization.yaml" <<YAML
+          apiVersion: kustomize.config.k8s.io/v1beta1
+          kind: Kustomization
+          namespace: ${ANS}
+          resources:
+            - namespace.yaml
+          helmCharts:
+            - name: ${CNAME}
+              repo: ${CREPO}
+              version: ${CVER}
+              releaseName: ${ANAME}
+              namespace: ${ANS}
+              valuesFile: values.generated.yaml
+          YAML
+
+          cat > "$APP_DIR/namespace.yaml" <<YAML
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: ${ANS}
+          YAML
+
+          yq e ".spec.applications[$i].values // {}" "$CFG_FILE" > "$APP_DIR/values.generated.yaml"
+        done
+
+        mapfile -t ALLOWED < <(yq e '.spec.imageMirrors.allowedRegistries[]' "$CFG_FILE")
+        POLICIES="$ROOT/apps/policies.yaml"
+        {
+          cat <<'YAML'
+        apiVersion: kyverno.io/v1
+        kind: ClusterPolicy
+        metadata:
+          name: require-internal-image-registry
+        spec:
+          validationFailureAction: Enforce
+          background: true
+          rules:
+            - name: restrict-image-registries
+              match:
+                any:
+                  - resources:
+                      kinds:
+                        - Pod
+              validate:
+                message: "Images must use an approved internal registry."
+                foreach:
+                  - list: "request.object.spec.containers"
+                    anyPattern:
+        YAML
+          for reg in "${ALLOWED[@]}"; do
+            echo "                      - image: \"${reg}/*\""
+          done
+          cat <<'YAML'
+                  - list: "request.object.spec.initContainers || []"
+                    anyPattern:
+        YAML
+          for reg in "${ALLOWED[@]}"; do
+            echo "                      - image: \"${reg}/*\""
+          done
+        } > "$POLICIES"
+
+        echo "generated app gitops manifests in $ROOT/apps"

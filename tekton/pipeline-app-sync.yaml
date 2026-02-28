@@ -1,0 +1,42 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: product-app-sync
+spec:
+  params:
+    - name: product
+      type: string
+    - name: builder-image
+      type: string
+  workspaces:
+    - name: cfg-repo
+    - name: gitops-repo
+  tasks:
+    - name: generate
+      taskRef:
+        name: generate-gitops-from-product-config
+      params:
+        - name: product
+          value: $(params.product)
+        - name: builder-image
+          value: $(params.builder-image)
+      workspaces:
+        - name: cfg-repo
+          workspace: cfg-repo
+        - name: gitops-repo
+          workspace: gitops-repo
+    - name: validate
+      runAfter:
+        - generate
+      taskRef:
+        name: validate-internal-mirror-images
+      params:
+        - name: product
+          value: $(params.product)
+        - name: builder-image
+          value: $(params.builder-image)
+      workspaces:
+        - name: cfg-repo
+          workspace: cfg-repo
+        - name: gitops-repo
+          workspace: gitops-repo

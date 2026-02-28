@@ -1,0 +1,48 @@
+apiVersion: platform.example.io/v1alpha1
+kind: ProductDeployment
+metadata:
+  name: example-product
+spec:
+  tenant:
+    name: example-product
+    namespace: product-example
+
+  vcluster:
+    channel: stable
+    releaseName: vcluster-example-product
+    values:
+      controlPlane:
+        service:
+          type: ClusterIP
+      sync:
+        toHost:
+          ingresses:
+            enabled: true
+          services:
+            enabled: true
+      integrations:
+        metricsServer:
+          enabled: true
+
+  imageMirrors:
+    allowedRegistries:
+      - registry.internal.example.com
+    translations:
+      docker.io: registry.internal.example.com/dockerhub
+      ghcr.io: registry.internal.example.com/ghcr
+      quay.io: registry.internal.example.com/quay
+      registry.k8s.io: registry.internal.example.com/k8s
+
+  applications:
+    - name: app-nginx
+      namespace: app-nginx
+      chart:
+        repo: https://charts.bitnami.com/bitnami
+        name: nginx
+        version: 18.2.3
+      values:
+        replicaCount: 2
+        image:
+          registry: registry.internal.example.com
+          repository: dockerhub/bitnami/nginx
+          tag: 1.27.2-debian-12-r0

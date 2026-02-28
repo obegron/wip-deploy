@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: product-example-infra
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    name: in-cluster
+    namespace: product-example
+  source:
+    repoURL: <gitops-repo-url>
+    targetRevision: <gitops-branch>
+    path: clusters/example-product/infra
+    kustomize:
+      buildOptions: "--enable-helm"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
