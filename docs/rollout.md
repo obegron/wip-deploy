@@ -7,6 +7,7 @@ Apply `gitops-repo/clusters/<product>/infra/argocd-application.yaml` to Argo CD 
 Outcome:
 - Product namespace exists.
 - vcluster is installed/updated by Argo CD.
+- If enabled in product config, `secret-sync-pull` is also deployed in the product namespace.
 
 ## 2. Register vcluster in Argo CD
 

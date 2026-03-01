@@ -16,3 +16,4 @@ data:
     notes:
       - vcluster chart source/version come from the vcluster-catalog repository channel.
       - All app images must resolve to allowed internal registries.
+      - Optional: spec.secretSyncPull enables a namespaced secret-sync pull deployment in infra output.

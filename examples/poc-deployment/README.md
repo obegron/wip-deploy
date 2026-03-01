@@ -31,3 +31,8 @@ Replace placeholders:
 - `<vcluster-ca-b64>`
 - `<gitops-repo-url>`
 - `<gitops-branch>`
+
+## Optional product config
+
+`cfg-repo/products/<product>/product.yaml` can include `spec.secretSyncPull` to
+generate and deploy a namespaced `secret-sync-controller` in pull mode.

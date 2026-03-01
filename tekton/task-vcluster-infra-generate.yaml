@@ -43,6 +43,7 @@ spec:
         CHART_REPO="$(yq e '.spec.chart.repo' "$CATALOG_FILE")"
         CHART_NAME="$(yq e '.spec.chart.name' "$CATALOG_FILE")"
         CHART_VER="$(yq e '.spec.chart.version' "$CATALOG_FILE")"
+        SECRET_SYNC_PULL_ENABLED="$(yq e '.spec.secretSyncPull.enabled // false' "$CFG_FILE")"
 
         OUT_DIR="${GITOPS_ROOT}/clusters/${PRODUCT}/infra"
         mkdir -p "$OUT_DIR"
@@ -54,6 +55,11 @@ spec:
         resources:
           - namespace.yaml
           - networkpolicy-argocd-access.yaml
+        YAML
+        if [ "${SECRET_SYNC_PULL_ENABLED}" = "true" ]; then
+          echo "  - secret-sync-pull.yaml" >> "${OUT_DIR}/kustomization.yaml"
+        fi
+        cat >> "${OUT_DIR}/kustomization.yaml" <<YAML
         helmCharts:
           - name: ${CHART_NAME}
             repo: ${CHART_REPO}
@@ -96,6 +102,132 @@ spec:
                 - protocol: TCP
                   port: 443
         YAML
+
+        if [ "${SECRET_SYNC_PULL_ENABLED}" = "true" ]; then
+          SECRET_SYNC_PULL_NAME="$(yq e '.spec.secretSyncPull.name // "secret-sync-pull"' "$CFG_FILE")"
+          SECRET_SYNC_PULL_IMAGE_REPO="$(yq e '.spec.secretSyncPull.image.repository // "docker.io/obegron/secret-sync-controller"' "$CFG_FILE")"
+          SECRET_SYNC_PULL_IMAGE_TAG="$(yq e '.spec.secretSyncPull.image.tag // "latest"' "$CFG_FILE")"
+          SECRET_SYNC_PULL_IMAGE_PULL_POLICY="$(yq e '.spec.secretSyncPull.image.pullPolicy // "IfNotPresent"' "$CFG_FILE")"
+          SECRET_SYNC_PULL_SOURCE_NS="$(yq e '.spec.secretSyncPull.sourceNamespace // ""' "$CFG_FILE")"
+          SECRET_SYNC_PULL_TARGET_NS="$(yq e '.spec.secretSyncPull.targetNamespace // ""' "$CFG_FILE")"
+          SECRET_SYNC_PULL_HOST_API_SERVER="$(yq e '.spec.secretSyncPull.host.apiServer // ""' "$CFG_FILE")"
+          SECRET_SYNC_PULL_HOST_TOKEN_FILE="$(yq e '.spec.secretSyncPull.host.tokenFile // "/var/run/secrets/kubernetes.io/serviceaccount/token"' "$CFG_FILE")"
+          SECRET_SYNC_PULL_HOST_CA_FILE="$(yq e '.spec.secretSyncPull.host.caFile // "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"' "$CFG_FILE")"
+          SECRET_SYNC_PULL_DEFAULT_DELETE_POLICY="$(yq e '.spec.secretSyncPull.defaultDeletePolicy // "delete"' "$CFG_FILE")"
+          SECRET_SYNC_PULL_METRICS_BIND_ADDRESS="$(yq e '.spec.secretSyncPull.metricsBindAddress // ":8080"' "$CFG_FILE")"
+          SECRET_SYNC_PULL_TENANT_SAFE_MODE="$(yq e '.spec.secretSyncPull.tenantSafeMode // true' "$CFG_FILE")"
+          SECRET_SYNC_PULL_OIDC_ISSUER_URL="$(yq e '.spec.secretSyncPull.oidc.issuerURL // ""' "$CFG_FILE")"
+          SECRET_SYNC_PULL_OIDC_JWKS_URL="$(yq e '.spec.secretSyncPull.oidc.jwksURL // ""' "$CFG_FILE")"
+          SECRET_SYNC_PULL_OIDC_AUDIENCE="$(yq e '.spec.secretSyncPull.oidc.audience // ""' "$CFG_FILE")"
+
+          if [ -z "${SECRET_SYNC_PULL_SOURCE_NS}" ]; then
+            SECRET_SYNC_PULL_SOURCE_NS="${TENANT_NS}"
+          fi
+          if [ -z "${SECRET_SYNC_PULL_TARGET_NS}" ]; then
+            SECRET_SYNC_PULL_TARGET_NS="${TENANT_NS}"
+          fi
+
+          cat > "${OUT_DIR}/secret-sync-pull.yaml" <<YAML
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: ${SECRET_SYNC_PULL_NAME}
+          namespace: ${TENANT_NS}
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: ${SECRET_SYNC_PULL_NAME}
+          namespace: ${TENANT_NS}
+        rules:
+          - apiGroups: [""]
+            resources: ["secrets"]
+            verbs: ["get", "list", "watch", "create", "update", "delete"]
+          - apiGroups: [""]
+            resources: ["events"]
+            verbs: ["create"]
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: ${SECRET_SYNC_PULL_NAME}
+          namespace: ${TENANT_NS}
+        subjects:
+          - kind: ServiceAccount
+            name: ${SECRET_SYNC_PULL_NAME}
+            namespace: ${TENANT_NS}
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: ${SECRET_SYNC_PULL_NAME}
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: ${SECRET_SYNC_PULL_NAME}
+          namespace: ${TENANT_NS}
+          labels:
+            app.kubernetes.io/name: ${SECRET_SYNC_PULL_NAME}
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: ${SECRET_SYNC_PULL_NAME}
+          template:
+            metadata:
+              labels:
+                app.kubernetes.io/name: ${SECRET_SYNC_PULL_NAME}
+            spec:
+              serviceAccountName: ${SECRET_SYNC_PULL_NAME}
+              containers:
+                - name: secret-sync-controller
+                  image: ${SECRET_SYNC_PULL_IMAGE_REPO}:${SECRET_SYNC_PULL_IMAGE_TAG}
+                  imagePullPolicy: ${SECRET_SYNC_PULL_IMAGE_PULL_POLICY}
+                  env:
+                    - name: POD_NAMESPACE
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.namespace
+                    - name: SYNC_MODE
+                      value: pull
+                    - name: SOURCE_NAMESPACE
+                      value: "${SECRET_SYNC_PULL_SOURCE_NS}"
+                    - name: TARGET_NAMESPACE
+                      value: "${SECRET_SYNC_PULL_TARGET_NS}"
+                    - name: HOST_API_SERVER
+                      value: "${SECRET_SYNC_PULL_HOST_API_SERVER}"
+                    - name: HOST_TOKEN_FILE
+                      value: "${SECRET_SYNC_PULL_HOST_TOKEN_FILE}"
+                    - name: HOST_CA_FILE
+                      value: "${SECRET_SYNC_PULL_HOST_CA_FILE}"
+                    - name: TENANT_SAFE_MODE
+                      value: "${SECRET_SYNC_PULL_TENANT_SAFE_MODE}"
+                    - name: DEFAULT_DELETE_POLICY
+                      value: "${SECRET_SYNC_PULL_DEFAULT_DELETE_POLICY}"
+                    - name: METRICS_BIND_ADDRESS
+                      value: "${SECRET_SYNC_PULL_METRICS_BIND_ADDRESS}"
+                    - name: OIDC_ISSUER_URL
+                      value: "${SECRET_SYNC_PULL_OIDC_ISSUER_URL}"
+                    - name: OIDC_JWKS_URL
+                      value: "${SECRET_SYNC_PULL_OIDC_JWKS_URL}"
+                    - name: OIDC_AUDIENCE
+                      value: "${SECRET_SYNC_PULL_OIDC_AUDIENCE}"
+                  livenessProbe:
+                    httpGet:
+                      path: /healthz
+                      port: 8080
+                    initialDelaySeconds: 5
+                    periodSeconds: 10
+                  readinessProbe:
+                    httpGet:
+                      path: /readyz
+                      port: 8080
+                    initialDelaySeconds: 3
+                    periodSeconds: 5
+        YAML
+        else
+          rm -f "${OUT_DIR}/secret-sync-pull.yaml"
+        fi
 
         yq e '.spec.values // {}' "$CATALOG_FILE" > /tmp/catalog-values.yaml
         yq e '.spec.vcluster.values // {}' "$CFG_FILE" > /tmp/cfg-values.yaml

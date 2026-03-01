@@ -24,6 +24,27 @@ spec:
         metricsServer:
           enabled: true
 
+  secretSyncPull:
+    enabled: true
+    name: secret-sync-pull
+    sourceNamespace: product-example
+    targetNamespace: product-example
+    image:
+      repository: docker.io/obegron/secret-sync-controller
+      tag: "0.2.0"
+      pullPolicy: IfNotPresent
+    host:
+      apiServer: ""
+      tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    oidc:
+      issuerURL: https://oidc.dev01.company.example
+      jwksURL: https://oidc.dev01.company.example/openid/v1/jwks
+      audience: secret-sync
+    tenantSafeMode: true
+    defaultDeletePolicy: delete
+    metricsBindAddress: :8080
+
   imageMirrors:
     allowedRegistries:
       - registry.internal.example.com

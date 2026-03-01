@@ -26,6 +26,16 @@ This repository provides a starter implementation for deploying third-party Helm
 4. Pipelines write changes to `gitops-repo/clusters/<product>/...`.
 5. Argo CD reconciles infra and app Applications.
 
+## Optional: Secret Sync Pull
+
+`spec.secretSyncPull` in `cfg-repo/products/<product>/product.yaml` enables a tenant-local
+`secret-sync-controller` deployment in pull mode as part of infra generation.
+
+When enabled, generated infra includes a namespaced:
+- `ServiceAccount`
+- `Role` + `RoleBinding`
+- `Deployment` (`SYNC_MODE=pull`)
+
 ## Builder Image Contract
 
 Pipelines require a `builder-image` param. That image must already contain:

@@ -3,6 +3,8 @@ kind: Kustomization
 namespace: product-example
 resources:
   - namespace.yaml
+  - networkpolicy-argocd-access.yaml
+  - secret-sync-pull.yaml
 helmCharts:
   - name: vcluster
     repo: https://charts.loft.sh
