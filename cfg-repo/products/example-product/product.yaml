@@ -41,7 +41,7 @@ spec:
       issuerURL: https://oidc.dev01.company.example
       jwksURL: https://oidc.dev01.company.example/openid/v1/jwks
       audience: secret-sync
-    tenantSafeMode: true
+    pullNamespaceIsolation: true
     defaultDeletePolicy: delete
     metricsBindAddress: :8080
 

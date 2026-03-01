@@ -115,7 +115,7 @@ spec:
           SECRET_SYNC_PULL_HOST_CA_FILE="$(yq e '.spec.secretSyncPull.host.caFile // "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"' "$CFG_FILE")"
           SECRET_SYNC_PULL_DEFAULT_DELETE_POLICY="$(yq e '.spec.secretSyncPull.defaultDeletePolicy // "delete"' "$CFG_FILE")"
           SECRET_SYNC_PULL_METRICS_BIND_ADDRESS="$(yq e '.spec.secretSyncPull.metricsBindAddress // ":8080"' "$CFG_FILE")"
-          SECRET_SYNC_PULL_TENANT_SAFE_MODE="$(yq e '.spec.secretSyncPull.tenantSafeMode // true' "$CFG_FILE")"
+          SECRET_SYNC_PULL_NAMESPACE_ISOLATION="$(yq e '.spec.secretSyncPull.pullNamespaceIsolation // true' "$CFG_FILE")"
           SECRET_SYNC_PULL_OIDC_ISSUER_URL="$(yq e '.spec.secretSyncPull.oidc.issuerURL // ""' "$CFG_FILE")"
           SECRET_SYNC_PULL_OIDC_JWKS_URL="$(yq e '.spec.secretSyncPull.oidc.jwksURL // ""' "$CFG_FILE")"
           SECRET_SYNC_PULL_OIDC_AUDIENCE="$(yq e '.spec.secretSyncPull.oidc.audience // ""' "$CFG_FILE")"
@@ -200,8 +200,8 @@ spec:
                       value: "${SECRET_SYNC_PULL_HOST_TOKEN_FILE}"
                     - name: HOST_CA_FILE
                       value: "${SECRET_SYNC_PULL_HOST_CA_FILE}"
-                    - name: TENANT_SAFE_MODE
-                      value: "${SECRET_SYNC_PULL_TENANT_SAFE_MODE}"
+                    - name: PULL_NAMESPACE_ISOLATION
+                      value: "${SECRET_SYNC_PULL_NAMESPACE_ISOLATION}"
                     - name: DEFAULT_DELETE_POLICY
                       value: "${SECRET_SYNC_PULL_DEFAULT_DELETE_POLICY}"
                     - name: METRICS_BIND_ADDRESS

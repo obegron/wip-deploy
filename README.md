@@ -36,6 +36,8 @@ When enabled, generated infra includes a namespaced:
 - `Role` + `RoleBinding`
 - `Deployment` (`SYNC_MODE=pull`)
 
+Default generated pull profile uses `PULL_NAMESPACE_ISOLATION=true` (`spec.secretSyncPull.pullNamespaceIsolation`).
+
 ## Builder Image Contract
 
 Pipelines require a `builder-image` param. That image must already contain:
